@@ -5,19 +5,23 @@ pygame.init()
 
 WIDTH, HEIGHT = 800, 600
 window = pygame.display.set_mode((WIDTH, HEIGHT))
-pygame.display.set_caption("Runner Game - Version 3")
+pygame.display.set_caption("Runner Game - Version 4")
 
 WHITE = (255, 255, 255)
 BLACK = (0, 0, 0)
 RED = (255, 0, 0)
 BLUE = (0, 0, 255)
 GREEN = (0, 255, 0)
+YELLOW = (255, 255, 0)
 
 player_width = 50
 player_height = 60
 player_x = WIDTH // 4
 player_y = HEIGHT - player_height - 10
 player_velocity = 5
+player_jump = False
+jump_height = 10
+jump_count = 10
 
 obstacle_width = 50
 obstacle_height = 50
@@ -26,21 +30,31 @@ obstacle_velocity = 7
 score = 0
 font = pygame.font.SysFont('comicsans', 30, True)
 
-def draw_window(obstacles):
+def draw_window(obstacles, powerups, coins):
     window.fill(WHITE)
     pygame.draw.rect(window, BLACK, (player_x, player_y, player_width, player_height))
     for obs in obstacles:
         obs.draw()
+    for powerup in powerups:
+        powerup.draw()
+    for coin in coins:
+        coin.draw()
     score_text = font.render(f'Score: {score}', 1, BLUE)
     window.blit(score_text, (WIDTH - score_text.get_width() - 10, 10))
     pygame.display.update()
 
-def handle_collision(obstacles):
+def handle_collision(obstacles, coins):
     global run
+    global score
     for obs in obstacles:
         if (player_x < obs.x < player_x + player_width or player_x < obs.x + obs.width < player_x + player_width) and \
            (player_y < obs.y < player_y + player_height or player_y < obs.y + obs.height < player_y + player_height):
             run = False
+    for coin in coins:
+        if (player_x < coin.x < player_x + player_width or player_x < coin.x + coin.width < player_x + player_width) and \
+           (player_y < coin.y < player_y + player_height or player_y < coin.y + coin.height < player_y + player_height):
+            score += 2
+            coins.remove(coin)
 
 def reset_obstacle(obstacles):
     global score
@@ -65,11 +79,28 @@ class Obstacle:
     def draw(self):
         pygame.draw.rect(window, self.color, (self.x, self.y, self.width, self.height))
 
+class Coin:
+    def __init__(self, x, y, width, height, velocity, color):
+        self.x = x
+        self.y = y
+        self.width = width
+        self.height = height
+        self.velocity = velocity
+        self.color = color
+
+    def move(self):
+        self.x -= self.velocity
+
+    def draw(self):
+        pygame.draw.rect(window, self.color, (self.x, self.y, self.width, self.height))
+
 def main():
     global run
     global player_x
     global player_y
     global player_velocity
+    global player_jump
+    global jump_count
     global score
 
     obstacles = [Obstacle(WIDTH, HEIGHT - obstacle_height - 10, obstacle_width, obstacle_height, obstacle_velocity, RED)]
@@ -90,6 +121,19 @@ def main():
 
     add_powerup()
 
+    coins = []
+    coin_width = 20
+    coin_height = 20
+    coin_velocity = 7
+
+    def add_coin():
+        coin_x = random.randint(WIDTH, WIDTH + 500)
+        coin_y = random.randint(0, HEIGHT - coin_height - 10)
+        coins.append(Coin(coin_x, coin_y, coin_width, coin_height, coin_velocity, YELLOW))
+
+    for _ in range(3):
+        add_coin()
+
     run = True
     while run:
         pygame.time.delay(30)
@@ -103,11 +147,28 @@ def main():
             player_x -= player_velocity
         if keys[pygame.K_RIGHT] and player_x + player_velocity < WIDTH - player_width:
             player_x += player_velocity
+        if not player_jump:
+            if keys[pygame.K_UP] and player_y - player_velocity > 0:
+                player_y -= player_velocity
+            if keys[pygame.K_DOWN] and player_y + player_velocity < HEIGHT - player_height:
+                player_y += player_velocity
+            if keys[pygame.K_SPACE]:
+                player_jump = True
+        else:
+            if jump_count >= -jump_height:
+                neg = 1
+                if jump_count < 0:
+                    neg = -1
+                player_y -= (jump_count ** 2) * 0.5 * neg
+                jump_count -= 1
+            else:
+                player_jump = False
+                jump_count = jump_height
         
         for obs in obstacles:
             obs.move()
         reset_obstacle(obstacles)
-        handle_collision(obstacles)
+        handle_collision(obstacles, coins)
         
         for powerup in powerups:
             powerup.move()
@@ -116,8 +177,11 @@ def main():
                 score += 5
                 powerups.remove(powerup)
                 add_powerup()
+
+        for coin in coins:
+            coin.move()
         
-        draw_window(obstacles + powerups)
+        draw_window(obstacles, powerups, coins)
 
     pygame.quit()
 
