@@ -5,7 +5,7 @@ pygame.init()
 
 WIDTH, HEIGHT = 800, 600
 window = pygame.display.set_mode((WIDTH, HEIGHT))
-pygame.display.set_caption("Runner Game - Version 6")
+pygame.display.set_caption("Runner Game - Version 7")
 
 WHITE = (255, 255, 255)
 BLACK = (0, 0, 0)
@@ -15,6 +15,8 @@ GREEN = (0, 255, 0)
 YELLOW = (255, 255, 0)
 PURPLE = (128, 0, 128)
 ORANGE = (255, 165, 0)
+CYAN = (0, 255, 255)
+MAGENTA = (255, 0, 255)
 
 player_width = 50
 player_height = 60
@@ -41,7 +43,13 @@ font = pygame.font.SysFont('comicsans', 30, True)
 background_scroll_speed = 2
 background_x = 0
 
-def draw_window(obstacles, powerups, coins, lives, invincible, dashing):
+enemy_width = 50
+enemy_height = 60
+enemies = []
+enemy_spawn_time = 0
+enemy_velocity = 5
+
+def draw_window(obstacles, powerups, coins, lives, invincible, dashing, enemies):
     global background_x
 
     background_x -= background_scroll_speed
@@ -59,6 +67,8 @@ def draw_window(obstacles, powerups, coins, lives, invincible, dashing):
         powerup.draw()
     for coin in coins:
         coin.draw()
+    for enemy in enemies:
+        enemy.draw()
     score_text = font.render(f'Score: {score}', 1, BLUE)
     lives_text = font.render(f'Lives: {lives}', 1, RED)
     invincible_text = font.render(f'Invincible: {invincible}', 1, GREEN if invincible else BLACK)
@@ -69,7 +79,7 @@ def draw_window(obstacles, powerups, coins, lives, invincible, dashing):
     window.blit(dash_text, (10, 90))
     pygame.display.update()
 
-def handle_collision(obstacles, coins):
+def handle_collision(obstacles, coins, enemies):
     global run
     global score
     global lives
@@ -87,6 +97,14 @@ def handle_collision(obstacles, coins):
            (player_y < coin.y < player_y + player_height or player_y < coin.y + coin.height < player_y + player_height):
             score += 2
             coins.remove(coin)
+    for enemy in enemies:
+        if (player_x < enemy.x < player_x + player_width or player_x < enemy.x + enemy.width < player_x + player_width) and \
+           (player_y < enemy.y < player_y + player_height or player_y < enemy.y + enemy.height < player_y + player_height):
+            if not invincible:
+                lives -= 1
+                if lives <= 0:
+                    run = False
+            enemies.remove(enemy)
 
 def reset_obstacle(obstacles):
     global score
@@ -126,6 +144,21 @@ class Coin:
     def draw(self):
         pygame.draw.rect(window, self.color, (self.x, self.y, self.width, self.height))
 
+class Enemy:
+    def __init__(self, x, y, width, height, velocity, color):
+        self.x = x
+        self.y = y
+        self.width = width
+        self.height = height
+        self.velocity = velocity
+        self.color = color
+
+    def move(self):
+        self.x -= self.velocity
+
+    def draw(self):
+        pygame.draw.rect(window, self.color, (self.x, self.y, self.width, self.height))
+
 def main():
     global run
     global player_x
@@ -139,6 +172,7 @@ def main():
     global invincible_duration
     global dashing
     global dash_cooldown
+    global enemy_spawn_time
 
     obstacles = [Obstacle(WIDTH, HEIGHT - obstacle_height - 10, obstacle_width, obstacle_height, obstacle_velocity, RED)]
     for _ in range(3):
@@ -178,6 +212,11 @@ def main():
 
     add_health_powerup()
 
+    def add_enemy():
+        enemy_x = random.randint(WIDTH, WIDTH + 300)
+        enemy_y = HEIGHT - enemy_height - 10
+        enemies.append(Enemy(enemy_x, enemy_y, enemy_width, enemy_height, enemy_velocity, MAGENTA))
+
     run = True
     while run:
         pygame.time.delay(30)
@@ -209,46 +248,40 @@ def main():
                 player_jump = False
                 jump_count = jump_height
         
-        if keys[pygame.K_LSHIFT] and not dashing and dash_cooldown == 0:
+        if keys[pygame.K_LSHIFT] and dash_cooldown <= 0:
             dashing = True
-            player_velocity = dash_velocity
+            dash_cooldown = 50
         if dashing:
-            dash_cooldown += 1
-            if dash_cooldown > 20:
+            player_x += dash_velocity
+            dash_cooldown -= 1
+            if dash_cooldown <= 0:
                 dashing = False
-                player_velocity = 5
-                dash_cooldown = 0
+                dash_cooldown = 50
         
+        if invincible:
+            invincible_duration -= 1
+            if invincible_duration <= 0:
+                invincible = False
+
         for obs in obstacles:
             obs.move()
-        reset_obstacle(obstacles)
-        handle_collision(obstacles, coins)
-        
         for powerup in powerups:
             powerup.move()
-            if (player_x < powerup.x < player_x + player_width or player_x < powerup.x + powerup.width < player_x + player_width) and \
-               (player_y < powerup.y < player_y + player_height or player_y < powerup.y + powerup.height < player_y + player_height):
-                if powerup.color == GREEN:
-                    score += 5
-                elif powerup.color == PURPLE:
-                    lives += 1
-                powerups.remove(powerup)
-                if powerup.color == GREEN:
-                    add_powerup()
-                elif powerup.color == PURPLE:
-                    add_health_powerup()
-
-        if invincible:
-            invincible_duration += 1
-            if invincible_duration > 100:
-                invincible = False
-                invincible_duration = 0
-
         for coin in coins:
             coin.move()
+        for enemy in enemies:
+            enemy.move()
         
-        draw_window(obstacles, powerups, coins, lives, invincible, dashing)
-
+        handle_collision(obstacles, coins, enemies)
+        reset_obstacle(obstacles)
+        
+        enemy_spawn_time += 1
+        if enemy_spawn_time >= 100:
+            add_enemy()
+            enemy_spawn_time = 0
+        
+        draw_window(obstacles, powerups, coins, lives, invincible, dashing, enemies)
+    
     pygame.quit()
 
 if __name__ == "__main__":
