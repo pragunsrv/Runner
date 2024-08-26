@@ -5,7 +5,7 @@ pygame.init()
 
 WIDTH, HEIGHT = 800, 600
 window = pygame.display.set_mode((WIDTH, HEIGHT))
-pygame.display.set_caption("Runner Game - Version 7")
+pygame.display.set_caption("Runner Game - Version 8")
 
 WHITE = (255, 255, 255)
 BLACK = (0, 0, 0)
@@ -49,7 +49,35 @@ enemies = []
 enemy_spawn_time = 0
 enemy_velocity = 5
 
-def draw_window(obstacles, powerups, coins, lives, invincible, dashing, enemies):
+# New Features
+powerup_spawn_time = 0
+coin_spawn_time = 0
+difficulty_increase_rate = 0.01
+max_obstacles = 10
+max_coins = 8
+boss_spawned = False
+
+class BossEnemy:
+    def __init__(self, x, y, width, height, velocity, color, health):
+        self.x = x
+        self.y = y
+        self.width = width
+        self.height = height
+        self.velocity = velocity
+        self.color = color
+        self.health = health
+
+    def move(self):
+        self.x -= self.velocity
+
+    def draw(self):
+        pygame.draw.rect(window, self.color, (self.x, self.y, self.width, self.height))
+        health_bar_length = self.width
+        health_ratio = self.health / 100
+        pygame.draw.rect(window, RED, (self.x, self.y - 10, health_bar_length, 5))
+        pygame.draw.rect(window, GREEN, (self.x, self.y - 10, health_bar_length * health_ratio, 5))
+
+def draw_window(obstacles, powerups, coins, lives, invincible, dashing, enemies, boss):
     global background_x
 
     background_x -= background_scroll_speed
@@ -69,6 +97,8 @@ def draw_window(obstacles, powerups, coins, lives, invincible, dashing, enemies)
         coin.draw()
     for enemy in enemies:
         enemy.draw()
+    if boss:
+        boss.draw()
     score_text = font.render(f'Score: {score}', 1, BLUE)
     lives_text = font.render(f'Lives: {lives}', 1, RED)
     invincible_text = font.render(f'Invincible: {invincible}', 1, GREEN if invincible else BLACK)
@@ -79,11 +109,18 @@ def draw_window(obstacles, powerups, coins, lives, invincible, dashing, enemies)
     window.blit(dash_text, (10, 90))
     pygame.display.update()
 
-def handle_collision(obstacles, coins, enemies):
+def handle_collision(obstacles, coins, enemies, boss):
     global run
     global score
     global lives
     global invincible
+    global boss_spawned
+    if boss and (player_x < boss.x < player_x + player_width or player_x < boss.x + boss.width < player_x + player_width) and \
+        (player_y < boss.y < player_y + player_height or player_y < boss.y + boss.height < player_y + player_height):
+        if not invincible:
+            lives -= 1
+            if lives <= 0:
+                run = False
     for obs in obstacles:
         if (player_x < obs.x < player_x + player_width or player_x < obs.x + obs.width < player_x + player_width) and \
            (player_y < obs.y < player_y + player_height or player_y < obs.y + obs.height < player_y + player_height):
@@ -105,6 +142,9 @@ def handle_collision(obstacles, coins, enemies):
                 if lives <= 0:
                     run = False
             enemies.remove(enemy)
+    if boss:
+        if boss.health <= 0:
+            boss_spawned = False
 
 def reset_obstacle(obstacles):
     global score
@@ -173,6 +213,12 @@ def main():
     global dashing
     global dash_cooldown
     global enemy_spawn_time
+    global powerup_spawn_time
+    global coin_spawn_time
+    global difficulty_increase_rate
+    global max_obstacles
+    global max_coins
+    global boss_spawned
 
     obstacles = [Obstacle(WIDTH, HEIGHT - obstacle_height - 10, obstacle_width, obstacle_height, obstacle_velocity, RED)]
     for _ in range(3):
@@ -202,7 +248,7 @@ def main():
         coin_y = random.randint(0, HEIGHT - coin_height - 10)
         coins.append(Coin(coin_x, coin_y, coin_width, coin_height, coin_velocity, YELLOW))
 
-    for _ in range(4):
+    for _ in range(max_coins):
         add_coin()
 
     def add_health_powerup():
@@ -217,7 +263,11 @@ def main():
         enemy_y = HEIGHT - enemy_height - 10
         enemies.append(Enemy(enemy_x, enemy_y, enemy_width, enemy_height, enemy_velocity, MAGENTA))
 
+    def spawn_boss():
+        return BossEnemy(WIDTH, HEIGHT - enemy_height - 10, enemy_width * 2, enemy_height * 2, enemy_velocity // 2, BLUE, 100)
+
     run = True
+    boss = None
     while run:
         pygame.time.delay(30)
         
@@ -271,8 +321,10 @@ def main():
             coin.move()
         for enemy in enemies:
             enemy.move()
+        if boss:
+            boss.move()
         
-        handle_collision(obstacles, coins, enemies)
+        handle_collision(obstacles, coins, enemies, boss)
         reset_obstacle(obstacles)
         
         enemy_spawn_time += 1
@@ -280,7 +332,24 @@ def main():
             add_enemy()
             enemy_spawn_time = 0
         
-        draw_window(obstacles, powerups, coins, lives, invincible, dashing, enemies)
+        powerup_spawn_time += 1
+        if powerup_spawn_time >= 150:
+            add_powerup()
+            powerup_spawn_time = 0
+        
+        coin_spawn_time += 1
+        if coin_spawn_time >= 150:
+            add_coin()
+            coin_spawn_time = 0
+        
+        if not boss_spawned and score > 500:
+            boss = spawn_boss()
+            boss_spawned = True
+        
+        if boss:
+            boss.health -= difficulty_increase_rate
+        
+        draw_window(obstacles, powerups, coins, lives, invincible, dashing, enemies, boss)
     
     pygame.quit()
 
